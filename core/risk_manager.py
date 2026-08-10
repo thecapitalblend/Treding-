@@ -1,11 +1,25 @@
 class RiskManager:
-    def calculate(self, price, atr, direction):
-        price = float(price)
-        atr = max(float(atr), price * 0.001)
-        if direction == "BUY":
-            sl, t1, t2 = price-1.5*atr, price+1.5*atr, price+3*atr
-        elif direction == "SELL":
-            sl, t1, t2 = price+1.5*atr, price-1.5*atr, price-3*atr
-        else:
-            sl = t1 = t2 = price
-        return {"entry": price, "stop_loss": sl, "target1": t1, "target2": t2}
+    def __init__(self, sl_atr=1.5, tp1_atr=1.5, tp2_atr=3.0):
+        self.sl_atr = sl_atr
+        self.tp1_atr = tp1_atr
+        self.tp2_atr = tp2_atr
+
+    def calculate(self, entry, atr, side):
+        entry = float(entry)
+        atr = max(float(atr), 0.0)
+
+        if side == "BUY":
+            return {
+                "entry": entry,
+                "sl": entry - atr * self.sl_atr,
+                "tp1": entry + atr * self.tp1_atr,
+                "tp2": entry + atr * self.tp2_atr,
+            }
+        if side == "SELL":
+            return {
+                "entry": entry,
+                "sl": entry + atr * self.sl_atr,
+                "tp1": entry - atr * self.tp1_atr,
+                "tp2": entry - atr * self.tp2_atr,
+            }
+        return {"entry": entry, "sl": entry, "tp1": entry, "tp2": entry}
