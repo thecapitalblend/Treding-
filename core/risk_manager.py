@@ -4,22 +4,12 @@ class RiskManager:
         self.tp1_atr = tp1_atr
         self.tp2_atr = tp2_atr
 
-    def calculate(self, entry, atr, side):
-        entry = float(entry)
-        atr = max(float(atr), 0.0)
-
-        if side == "BUY":
-            return {
-                "entry": entry,
-                "sl": entry - atr * self.sl_atr,
-                "tp1": entry + atr * self.tp1_atr,
-                "tp2": entry + atr * self.tp2_atr,
-            }
-        if side == "SELL":
-            return {
-                "entry": entry,
-                "sl": entry + atr * self.sl_atr,
-                "tp1": entry - atr * self.tp1_atr,
-                "tp2": entry - atr * self.tp2_atr,
-            }
+    def calculate(self, entry, atr, action):
+        entry, atr = float(entry), max(float(atr), 0.0)
+        if action == "BUY CALL":
+            return {"entry": entry, "sl": entry-atr*self.sl_atr,
+                    "tp1": entry+atr*self.tp1_atr, "tp2": entry+atr*self.tp2_atr}
+        if action in ("BUY PUT", "SELL / EXIT"):
+            return {"entry": entry, "sl": entry+atr*self.sl_atr,
+                    "tp1": entry-atr*self.tp1_atr, "tp2": entry-atr*self.tp2_atr}
         return {"entry": entry, "sl": entry, "tp1": entry, "tp2": entry}
