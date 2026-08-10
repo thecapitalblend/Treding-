@@ -1,24 +1,24 @@
 app:
-  mode: paper
-  symbol: "^NSEI"
-  interval: "5m"
-  history: "1mo"
-
-technical:
-  ema_fast: 12
-  ema_slow: 26
-  rsi: 14
-  atr: 14
+  mode: PAPER
+  timezone: Asia/Kolkata
 
 risk:
   sl_atr: 1.5
   tp1_atr: 1.5
   tp2_atr: 3.0
+  max_daily_loss_pct: 1.0
 
-sentiment:
-  finbert_model: "ProsusAI/finbert"
-  enabled: false
+ensemble:
+  technical: 0.60
+  sentiment: 0.25
+  celestial: 0.15
 
 broker:
   enabled: false
-  provider: "none"
+  provider: none
+  client_id: ""
+  access_token: ""
+
+notes:
+  - "Never place real orders until paper/backtest validation is complete."
+  - "Celestial analytics are experimental research features."

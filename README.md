@@ -1,45 +1,45 @@
-# Jarvis Trading Assistant
+# Jarvis Trading Assistant V2
 
-Research dashboard combining:
-- Quantitative technical analysis
-- Market-news sentiment
+Streamlit research dashboard combining:
+
+- Technical analysis: EMA, MACD, RSI, ATR, VWAP, ADX/DMI, volume
+- News sentiment with optional FinBERT
 - Swiss Ephemeris celestial calculations
-- Ensemble decision scoring
+- Experimental SBC/Vedha/Ashtakavarga research fields
+- Master ensemble confidence
+- BUY CALL / BUY PUT / HOLD / SELL-EXIT research actions
 - ATR-based paper risk levels
-
-## Streamlit
-
-Main entry point:
-
-```bash
-streamlit run app.py
-```
+- Paper trade journal
 
 ## GitHub structure
 
-```text
-app.py
-config.yaml
-requirements.txt
-core/
-  __init__.py
-  aggregator.py
-  paper_execution.py
-  risk_manager.py
-modules/
-  __init__.py
-  technical_engine.py
-  sentiment_engine.py
-  astro_engine.py
-logs/
-```
+Upload the files exactly like this:
+
+Jarvis-Trading-Assistant/
+├── app.py
+├── config.yaml
+├── requirements.txt
+├── core/
+│   ├── __init__.py
+│   ├── aggregator.py
+│   ├── paper_execution.py
+│   └── risk_manager.py
+├── modules/
+│   ├── __init__.py
+│   ├── astro_engine.py
+│   ├── sentiment_engine.py
+│   └── technical_engine.py
+├── data/
+└── logs/
 
 ## Important
 
-The application is deliberately PAPER MODE. No broker credentials or real orders are included.
+This version is PAPER MODE. It does not connect to Dhan/Fyers and does not send real orders.
 
-Celestial/Sarvatobhadra-style outputs are experimental research features and are not scientifically validated predictors of market prices.
+FinBERT downloads model files on first activation and can be resource intensive on Streamlit Cloud. Keep it OFF until the base dashboard is stable.
 
-FinBERT is optional because first-time model loading can be slow and memory intensive on Streamlit Cloud. Enable it from the sidebar after the base application is stable.
+Celestial/SBC/astrology signals are experimental and should not be treated as scientifically validated predictors or guaranteed trading signals.
 
-Never commit broker API keys, TOTP secrets, access tokens, or passwords to GitHub.
+## Streamlit
+
+Set the main file to `app.py` and reboot/redeploy after committing changes.

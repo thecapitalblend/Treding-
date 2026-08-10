@@ -2,11 +2,11 @@ streamlit
 pandas
 numpy
 yfinance
-pyswisseph
+plotly
 requests
 beautifulsoup4
-pyyaml
-python-dotenv
+pyswisseph
 transformers
 torch
-safetensors
+pyyaml
+python-dotenv
