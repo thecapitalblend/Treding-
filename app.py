@@ -16,8 +16,8 @@ st.set_page_config(
 )
 
 @st.cache_data(ttl=60, show_spinner=False)
-def load_market(symbol: str, interval: str):
-    return MasterAggregator.fetch_market_data(symbol, interval)
+def load_market(symbol: str, interval: str, period: str):
+    return MasterAggregator.fetch_market_data(symbol, interval, period)
 
 def fmt(x, digits=2):
     try:
@@ -53,7 +53,8 @@ if refresh:
     st.rerun()
 
 try:
-    df = load_market(symbol.strip() or "^NSEI", interval)
+    period_map = {"5d": "5d", "1mo": "1mo", "3mo": "3mo"}
+    df = load_market(symbol.strip() or "^NSEI", interval, period_map.get(history, "1mo"))
 except Exception as e:
     st.error(f"Market data error: {e}")
     st.stop()
@@ -170,6 +171,7 @@ with c:
     else:
         st.error("Celestial calculation unavailable.")
         st.caption(astro.get("error", "Unknown Swiss Ephemeris error"))
+        st.info("V5 uses pysweph (Swiss Ephemeris) and will calculate the table automatically after the dependency rebuild.")
 
 st.subheader("🪐 Live Planetary Positions — Sidereal Lahiri")
 if astro["available"] and astro.get("planets"):
@@ -184,7 +186,7 @@ if astro["available"] and astro.get("planets"):
         "Positions are geocentric sidereal transit positions."
     )
 else:
-    st.info("Planet table will appear when Swiss Ephemeris is available.")
+    st.warning("Swiss Ephemeris is unavailable in the current runtime. Check the deployment logs for pysweph installation.")
 
 st.subheader("🎯 Master Decision")
 m1, m2, m3, m4 = st.columns(4)
