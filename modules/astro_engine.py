@@ -1,4 +1,4 @@
-from datetime import timezone
+from datetime import datetime, timezone
 import math
 
 try:
@@ -10,88 +10,78 @@ NAKSHATRAS = [
     "Ashwini","Bharani","Krittika","Rohini","Mrigashira","Ardra","Punarvasu",
     "Pushya","Ashlesha","Magha","Purva Phalguni","Uttara Phalguni","Hasta",
     "Chitra","Swati","Vishakha","Anuradha","Jyeshtha","Mula","Purva Ashadha",
-    "Uttara Ashadha","Shravana","Dhanishtha","Shatabhisha","Purva Bhadrapada",
+    "Uttara Ashadha","Shravana","Dhanishta","Shatabhisha","Purva Bhadrapada",
     "Uttara Bhadrapada","Revati"
 ]
-SIGNS = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio",
-         "Sagittarius","Capricorn","Aquarius","Pisces"]
+SIGNS = ["Mesha","Vrishabha","Mithuna","Karka","Simha","Kanya","Tula","Vrishchika","Dhanu","Makara","Kumbha","Meena"]
 PLANETS = {
-    "Sun": swe.SUN if swe else 0,
-    "Moon": swe.MOON if swe else 1,
-    "Mars": swe.MARS if swe else 4,
-    "Mercury": swe.MERCURY if swe else 2,
-    "Jupiter": swe.JUPITER if swe else 5,
-    "Venus": swe.VENUS if swe else 3,
-    "Saturn": swe.SATURN if swe else 6,
+    "Sun": 0, "Moon": 1, "Mercury": 2, "Venus": 3, "Mars": 4,
+    "Jupiter": 5, "Saturn": 6, "Rahu": 10, "Ketu": 11
 }
 
 class CelestialEngine:
-    """Experimental Vedic-finance research layer. Not a validated predictor."""
-
-    def _jd(self, dt):
-        dt = dt.replace(tzinfo=dt.tzinfo or timezone.utc).astimezone(timezone.utc)
-        return swe.julday(dt.year, dt.month, dt.day,
-                          dt.hour + dt.minute/60 + dt.second/3600)
-
-    def _calc(self, jd, pid):
-        pos, ret = swe.calc_ut(jd, pid)
-        return float(pos[0] % 360), float(pos[3])
-
-    def analyze(self, dt):
-        if swe is None:
-            return {"score": 0, "moon_longitude": 0, "nakshatra": "Unavailable",
-                    "moon_sign": "Unavailable", "tithi": 0, "retrograde": [],
-                    "planets": {}, "sbc": "Unavailable"}
-
-        jd = self._jd(dt)
-        vals, speeds = {}, {}
-        for name, pid in PLANETS.items():
-            vals[name], speeds[name] = self._calc(jd, pid)
-
-        moon = vals["Moon"]
-        nak_span = 360 / 27
-        nak_idx = min(26, int(moon / nak_span))
-        nak = NAKSHATRAS[nak_idx]
-        sign = SIGNS[int(moon // 30)]
-
-        sun_moon_diff = (moon - vals["Sun"]) % 360
-        tithi = sun_moon_diff / 12 + 1
-        retro = [n for n in ("Mars","Mercury","Jupiter","Venus","Saturn") if speeds[n] < 0]
-
-        score = 0.0
-        # Small experimental confluence score only.
-        for name in ("Jupiter","Venus"):
-            sep = abs((vals[name] - moon + 180) % 360 - 180)
-            if sep <= 15: score += 8
-        for name in ("Mars","Saturn"):
-            sep = abs((vals[name] - moon + 180) % 360 - 180)
-            if sep <= 15: score -= 8
-
-        # Experimental "SBC pressure" proxy: clusters near Moon.
-        malefic_near = sum(
-            abs((vals[n] - moon + 180) % 360 - 180) <= 30
-            for n in ("Mars","Saturn")
-        )
-        benefic_near = sum(
-            abs((vals[n] - moon + 180) % 360 - 180) <= 30
-            for n in ("Jupiter","Venus")
-        )
-        score += (benefic_near - malefic_near) * 3
-
-        return {
-            "score": int(max(-30, min(30, round(score)))),
-            "moon_longitude": moon,
-            "nakshatra": nak,
-            "moon_sign": sign,
-            "tithi": tithi,
-            "retrograde": retro,
-            "planets": vals,
-            "planet_speeds": speeds,
-            "sbc": {
-                "nakshatra_index": nak_idx + 1,
-                "benefic_pressure": benefic_near,
-                "malefic_pressure": malefic_near,
-                "vedha_proxy": "BENEFIC" if benefic_near > malefic_near else
-                               "MALEFIC" if malefic_near > benefic_near else "NEUTRAL"
-            }
+    def calculate(self, dt):
+        base = {
+            "score": 0.0, "moon_longitude": float("nan"),
+            "moon_sign": "Unavailable", "nakshatra": "Unavailable",
+            "tithi_number": float("nan"), "tithi_name": "Unavailable",
+            "retrograde": "None"
         }
+        if swe is None:
+            return base
+
+        try:
+            jd = swe.julday(dt.year, dt.month, dt.day,
+                            dt.hour + dt.minute/60 + dt.second/3600)
+
+            # Lahiri sidereal zodiac
+            swe.set_sid_mode(swe.SIDM_LAHIRI)
+            flags = swe.FLG_SWIEPH | swe.FLG_SIDEREAL | swe.FLG_SPEED
+
+            positions = {}
+            for name, body in PLANETS.items():
+                xx, _ = swe.calc_ut(jd, body, flags)
+                positions[name] = xx
+
+            sun = positions["Sun"][0] % 360
+            moon = positions["Moon"][0] % 360
+
+            sign_idx = int(moon // 30)
+            nak_idx = int(moon // (360/27))
+            elong = (moon - sun) % 360
+            tithi_num = int(elong // 12) + 1
+
+            paksha = "Shukla" if tithi_num <= 15 else "Krishna"
+            tithi_day = tithi_num if tithi_num <= 15 else tithi_num - 15
+            tithi_names = [
+                "Pratipada","Dvitiya","Tritiya","Chaturthi","Panchami","Shashthi",
+                "Saptami","Ashtami","Navami","Dashami","Ekadashi","Dwadashi",
+                "Trayodashi","Chaturdashi","Purnima"
+            ]
+            tname = f"{paksha} {tithi_names[tithi_day-1]}"
+
+            retro = []
+            for name in ["Mercury","Venus","Mars","Jupiter","Saturn"]:
+                if positions[name][3] < 0:
+                    retro.append(name)
+
+            # Experimental score: tiny bounded research signal, never dominant.
+            score = 0
+            if sign_idx in (0, 4, 8):
+                score += 2
+            elif sign_idx in (2, 5, 10):
+                score -= 2
+            if retro:
+                score -= min(3, len(retro))
+
+            return {
+                "score": float(score),
+                "moon_longitude": moon,
+                "moon_sign": SIGNS[sign_idx],
+                "nakshatra": NAKSHATRAS[nak_idx],
+                "tithi_number": float(tithi_num),
+                "tithi_name": tname,
+                "retrograde": ", ".join(retro) if retro else "None"
+            }
+        except Exception:
+            return base

@@ -1,132 +1,115 @@
 import numpy as np
 import pandas as pd
 
-class TechnicalAnalyzer:
-    def __init__(self, df):
-        self.df = df.copy()
-
+class TechnicalEngine:
     @staticmethod
     def _ema(s, n):
-        return s.ewm(span=n, adjust=False).mean()
+        return s.ewm(span=n, adjust=False, min_periods=n).mean()
 
-    def generate_features(self):
-        d = self.df
-        d["ema_fast"] = self._ema(d["close"], 12)
-        d["ema_slow"] = self._ema(d["close"], 26)
-        d["ema20"] = self._ema(d["close"], 20)
-        d["ema50"] = self._ema(d["close"], 50)
+    @staticmethod
+    def _rsi(s, n=14):
+        d = s.diff()
+        up = d.clip(lower=0)
+        dn = -d.clip(upper=0)
+        au = up.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+        ad = dn.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+        rs = au / ad.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        return rsi.fillna(50)
 
-        d["macd"] = d["ema_fast"] - d["ema_slow"]
-        d["macd_signal"] = d["macd"].ewm(span=9, adjust=False).mean()
-        d["macd_hist"] = d["macd"] - d["macd_signal"]
-
-        delta = d["close"].diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(alpha=1/14, adjust=False).mean()
-        avg_loss = loss.ewm(alpha=1/14, adjust=False).mean()
-        rs = avg_gain / avg_loss.replace(0, np.nan)
-        d["rsi"] = (100 - 100 / (1 + rs)).fillna(50)
-
-        prev_close = d["close"].shift(1)
+    @staticmethod
+    def _atr(df, n=14):
+        prev = df["close"].shift(1)
         tr = pd.concat([
-            d["high"] - d["low"],
-            (d["high"] - prev_close).abs(),
-            (d["low"] - prev_close).abs()
+            df["high"] - df["low"],
+            (df["high"] - prev).abs(),
+            (df["low"] - prev).abs()
         ], axis=1).max(axis=1)
-        d["atr"] = tr.ewm(alpha=1/14, adjust=False).mean()
+        return tr.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
 
-        typical = (d["high"] + d["low"] + d["close"]) / 3
-        volume = d["volume"].fillna(0)
-        if float(volume.sum()) > 0:
-            dates = pd.Series(d.index.date, index=d.index)
-            pv = typical * volume
-            den = volume.groupby(dates).cumsum().replace(0, np.nan)
-            d["vwap"] = pv.groupby(dates).cumsum() / den
+    @staticmethod
+    def _adx(df, n=14):
+        high, low, close = df["high"], df["low"], df["close"]
+        up = high.diff()
+        dn = -low.diff()
+        plus_dm = up.where((up > dn) & (up > 0), 0.0)
+        minus_dm = dn.where((dn > up) & (dn > 0), 0.0)
+        prev = close.shift(1)
+        tr = pd.concat([
+            high-low, (high-prev).abs(), (low-prev).abs()
+        ], axis=1).max(axis=1)
+        atr = tr.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+        plus_di = 100 * plus_dm.ewm(alpha=1/n, adjust=False, min_periods=n).mean() / atr.replace(0, np.nan)
+        minus_di = 100 * minus_dm.ewm(alpha=1/n, adjust=False, min_periods=n).mean() / atr.replace(0, np.nan)
+        dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+        adx = dx.ewm(alpha=1/n, adjust=False, min_periods=n).mean()
+        return adx, plus_di, minus_di
+
+    def calculate(self, df):
+        df = df.copy()
+        df["ema_fast"] = self._ema(df["close"], 12)
+        df["ema_slow"] = self._ema(df["close"], 26)
+        df["rsi"] = self._rsi(df["close"])
+        df["atr"] = self._atr(df)
+        df["macd"] = df["ema_fast"] - df["ema_slow"]
+        df["macd_signal"] = self._ema(df["macd"], 9)
+
+        adx, dip, dim = self._adx(df)
+        df["adx"], df["di_plus"], df["di_minus"] = adx, dip, dim
+
+        pv = ((df["high"] + df["low"] + df["close"]) / 3) * df["volume"].fillna(0)
+        vol = df["volume"].fillna(0)
+        if vol.sum() > 0:
+            df["vwap"] = pv.cumsum() / vol.cumsum().replace(0, np.nan)
         else:
-            d["vwap"] = typical.expanding().mean()
+            df["vwap"] = df["close"].rolling(20, min_periods=1).mean()
 
-        up = d["high"].diff()
-        down = -d["low"].diff()
-        plus_dm = up.where((up > down) & (up > 0), 0.0)
-        minus_dm = down.where((down > up) & (down > 0), 0.0)
-        atr = d["atr"].replace(0, np.nan)
-        d["di_plus"] = 100 * plus_dm.ewm(alpha=1/14, adjust=False).mean() / atr
-        d["di_minus"] = 100 * minus_dm.ewm(alpha=1/14, adjust=False).mean() / atr
-        dx = 100 * (d["di_plus"] - d["di_minus"]).abs() / (d["di_plus"] + d["di_minus"]).replace(0, np.nan)
-        d["adx"] = dx.ewm(alpha=1/14, adjust=False).mean()
+        return df
 
-        d["volume_sma20"] = volume.rolling(20).mean()
-        d["volume_ratio"] = volume / d["volume_sma20"].replace(0, np.nan)
-
-        d.replace([np.inf, -np.inf], np.nan, inplace=True)
-        return d
-
-    def evaluate_signals(self):
-        d = self.df
-        if len(d) < 30:
-            return {"score": 0, "trend": "NEUTRAL", "regime": "NORMAL",
-                    "bull_conditions": [], "bear_conditions": []}
-
-        x = d.iloc[-1]
-        p = d.iloc[-2]
+    def summary(self, df):
+        r = df.iloc[-1]
+        price = float(r["close"])
         score = 0.0
-        bull, bear = [], []
 
-        if x.ema_fast > x.ema_slow:
-            score += 20; bull.append("EMA12>EMA26")
-        else:
-            score -= 20; bear.append("EMA12<EMA26")
+        # Trend / VWAP
+        if np.isfinite(r["ema_fast"]) and np.isfinite(r["ema_slow"]):
+            score += 20 if r["ema_fast"] > r["ema_slow"] else -20
+        if np.isfinite(r["vwap"]):
+            score += 15 if price > r["vwap"] else -15
 
-        if x.ema20 > x.ema50:
-            score += 10; bull.append("EMA20>EMA50")
-        else:
-            score -= 10; bear.append("EMA20<EMA50")
+        # RSI
+        if r["rsi"] >= 55: score += 15
+        elif r["rsi"] <= 45: score -= 15
 
-        if x.macd > x.macd_signal:
-            score += 15; bull.append("MACD bullish")
-        else:
-            score -= 15; bear.append("MACD bearish")
+        # MACD
+        if r["macd"] > r["macd_signal"]: score += 15
+        else: score -= 15
 
-        if 50 <= x.rsi < 68:
-            score += 10; bull.append("RSI bullish zone")
-        elif 32 < x.rsi < 50:
-            score -= 5; bear.append("RSI weak")
-        elif x.rsi >= 70:
-            score -= 5; bear.append("RSI overbought")
-        elif x.rsi <= 30:
-            score += 5; bull.append("RSI oversold")
+        # DMI + ADX
+        if r["adx"] >= 20:
+            if r["di_plus"] > r["di_minus"]: score += 20
+            else: score -= 20
 
-        if pd.notna(x.vwap):
-            if x.close > x.vwap:
-                score += 15; bull.append("Price>VWAP")
-            else:
-                score -= 15; bear.append("Price<VWAP")
+        score = float(np.clip(score, -100, 100))
+        trend = "BULLISH" if score >= 25 else ("BEARISH" if score <= -25 else "NEUTRAL")
 
-        if pd.notna(x.adx) and x.adx >= 20:
-            if x.di_plus > x.di_minus:
-                score += 10; bull.append("DMI bullish")
-            else:
-                score -= 10; bear.append("DMI bearish")
-
-        if pd.notna(x.volume_ratio) and x.volume_ratio >= 1.2:
-            score += 5 if x.close >= p.close else -5
-
-        score = float(max(-100, min(100, score)))
-        trend = "BULLISH" if score >= 30 else "BEARISH" if score <= -30 else "NEUTRAL"
-
-        atr_pct = float(x.atr / x.close * 100) if x.close else 0
-        regime = "HIGH_VOL" if atr_pct >= 1.0 else "LOW_VOL" if atr_pct <= 0.25 else "NORMAL"
-
-        cross_up = x.ema_fast > x.ema_slow and p.ema_fast <= p.ema_slow
-        cross_down = x.ema_fast < x.ema_slow and p.ema_fast >= p.ema_slow
+        def val(x, default=0.0):
+            try:
+                x = float(x)
+                return x if np.isfinite(x) else default
+            except Exception:
+                return default
 
         return {
             "score": score,
             "trend": trend,
-            "regime": regime,
-            "bull_conditions": bull,
-            "bear_conditions": bear,
-            "ema_cross_up": bool(cross_up),
-            "ema_cross_down": bool(cross_down),
+            "rsi": val(r["rsi"], 50),
+            "macd": val(r["macd"]),
+            "atr": val(r["atr"]),
+            "vwap": val(r["vwap"]),
+            "adx": val(r["adx"]),
+            "di_plus": val(r["di_plus"]),
+            "di_minus": val(r["di_minus"]),
+            "ema_fast": val(r["ema_fast"]),
+            "ema_slow": val(r["ema_slow"]),
         }
