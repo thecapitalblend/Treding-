@@ -1,0 +1,10 @@
+streamlit
+lightweight-charts
+pandas
+pandas-ta
+numpy
+transformers
+torch
+pysweph
+dhanhq
+fyers-apiv3
