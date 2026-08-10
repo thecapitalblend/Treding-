@@ -1,11 +1,24 @@
 app:
   mode: paper
-  default_symbol: "^NSEI"
-  default_interval: "5m"
+  symbol: "^NSEI"
+  interval: "5m"
+  history: "1mo"
+
+technical:
+  ema_fast: 12
+  ema_slow: 26
+  rsi: 14
+  atr: 14
+
 risk:
-  atr_stop_multiplier: 1.5
-  target1_atr: 1.5
-  target2_atr: 3.0
-models:
-  finbert: "ProsusAI/finbert"
-  enable_by_default: false
+  sl_atr: 1.5
+  tp1_atr: 1.5
+  tp2_atr: 3.0
+
+sentiment:
+  finbert_model: "ProsusAI/finbert"
+  enabled: false
+
+broker:
+  enabled: false
+  provider: "none"
