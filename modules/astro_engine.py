@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import timezone
 import math
 
 try:
@@ -15,73 +15,83 @@ NAKSHATRAS = [
 ]
 SIGNS = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio",
          "Sagittarius","Capricorn","Aquarius","Pisces"]
+PLANETS = {
+    "Sun": swe.SUN if swe else 0,
+    "Moon": swe.MOON if swe else 1,
+    "Mars": swe.MARS if swe else 4,
+    "Mercury": swe.MERCURY if swe else 2,
+    "Jupiter": swe.JUPITER if swe else 5,
+    "Venus": swe.VENUS if swe else 3,
+    "Saturn": swe.SATURN if swe else 6,
+}
 
 class CelestialEngine:
-    """
-    Research-only celestial layer.
-    Calculates Swiss Ephemeris planetary longitudes and Moon nakshatra.
-    The SBC score is a simplified computational research heuristic, not a
-    claim of canonical classical SBC implementation or predictive validity.
-    """
-    def __init__(self):
-        if swe is not None:
-            try:
-                swe.set_ephe_path("")
-            except Exception:
-                pass
+    """Experimental Vedic-finance research layer. Not a validated predictor."""
 
     def _jd(self, dt):
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        dt = dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=dt.tzinfo or timezone.utc).astimezone(timezone.utc)
         return swe.julday(dt.year, dt.month, dt.day,
                           dt.hour + dt.minute/60 + dt.second/3600)
 
-    def _planet(self, jd, pid):
-        pos, _ = swe.calc_ut(jd, pid)
-        return float(pos[0] % 360)
+    def _calc(self, jd, pid):
+        pos, ret = swe.calc_ut(jd, pid)
+        return float(pos[0] % 360), float(pos[3])
 
     def analyze(self, dt):
         if swe is None:
-            return {
-                "score": 0, "moon_longitude": 0.0,
-                "nakshatra": "Unavailable", "moon_sign": "Unavailable",
-                "planets": {}
-            }
+            return {"score": 0, "moon_longitude": 0, "nakshatra": "Unavailable",
+                    "moon_sign": "Unavailable", "tithi": 0, "retrograde": [],
+                    "planets": {}, "sbc": "Unavailable"}
 
         jd = self._jd(dt)
-        moon = self._planet(jd, swe.MOON)
-        planets = {
-            "Sun": self._planet(jd, swe.SUN),
-            "Moon": moon,
-            "Mars": self._planet(jd, swe.MARS),
-            "Mercury": self._planet(jd, swe.MERCURY),
-            "Jupiter": self._planet(jd, swe.JUPITER),
-            "Venus": self._planet(jd, swe.VENUS),
-            "Saturn": self._planet(jd, swe.SATURN),
-        }
+        vals, speeds = {}, {}
+        for name, pid in PLANETS.items():
+            vals[name], speeds[name] = self._calc(jd, pid)
 
+        moon = vals["Moon"]
         nak_span = 360 / 27
-        idx = min(26, int(moon / nak_span))
-        nak = NAKSHATRAS[idx]
+        nak_idx = min(26, int(moon / nak_span))
+        nak = NAKSHATRAS[nak_idx]
         sign = SIGNS[int(moon // 30)]
 
-        # Research heuristic: benefic proximity to Moon gets positive points;
-        # malefic proximity gets negative points. This is intentionally modest.
+        sun_moon_diff = (moon - vals["Sun"]) % 360
+        tithi = sun_moon_diff / 12 + 1
+        retro = [n for n in ("Mars","Mercury","Jupiter","Venus","Saturn") if speeds[n] < 0]
+
         score = 0.0
-        for name in ("Jupiter", "Venus", "Mercury"):
-            sep = abs((planets[name] - moon + 180) % 360 - 180)
-            if sep <= 15:
-                score += 10
-        for name in ("Mars", "Saturn"):
-            sep = abs((planets[name] - moon + 180) % 360 - 180)
-            if sep <= 15:
-                score -= 10
+        # Small experimental confluence score only.
+        for name in ("Jupiter","Venus"):
+            sep = abs((vals[name] - moon + 180) % 360 - 180)
+            if sep <= 15: score += 8
+        for name in ("Mars","Saturn"):
+            sep = abs((vals[name] - moon + 180) % 360 - 180)
+            if sep <= 15: score -= 8
+
+        # Experimental "SBC pressure" proxy: clusters near Moon.
+        malefic_near = sum(
+            abs((vals[n] - moon + 180) % 360 - 180) <= 30
+            for n in ("Mars","Saturn")
+        )
+        benefic_near = sum(
+            abs((vals[n] - moon + 180) % 360 - 180) <= 30
+            for n in ("Jupiter","Venus")
+        )
+        score += (benefic_near - malefic_near) * 3
 
         return {
-            "score": max(-30, min(30, score)),
+            "score": int(max(-30, min(30, round(score)))),
             "moon_longitude": moon,
             "nakshatra": nak,
             "moon_sign": sign,
-            "planets": planets,
+            "tithi": tithi,
+            "retrograde": retro,
+            "planets": vals,
+            "planet_speeds": speeds,
+            "sbc": {
+                "nakshatra_index": nak_idx + 1,
+                "benefic_pressure": benefic_near,
+                "malefic_pressure": malefic_near,
+                "vedha_proxy": "BENEFIC" if benefic_near > malefic_near else
+                               "MALEFIC" if malefic_near > benefic_near else "NEUTRAL"
+            }
         }
