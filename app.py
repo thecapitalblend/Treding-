@@ -1,198 +1,210 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
+import plotly.graph_objects as go
 from datetime import datetime, timezone
+from pathlib import Path
 
-from modules.technical_engine import TechnicalAnalyzer
-from modules.sentiment_engine import SentimentEngine
-from modules.astro_engine import CelestialEngine
 from core.aggregator import MasterAggregator
-from core.risk_manager import RiskManager
 from core.paper_execution import PaperExecutionEngine
 
-st.set_page_config(page_title="Jarvis Trading Assistant", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Jarvis Trading Assistant V3", page_icon="🤖", layout="wide")
 
-st.title("🤖 Jarvis Trading Assistant")
-st.caption("Quantitative + Sentiment + Celestial research dashboard | PAPER MODE")
+# ---------- Helpers ----------
+@st.cache_data(ttl=60, show_spinner=False)
+def load_market(symbol: str, interval: str):
+    return MasterAggregator.fetch_market_data(symbol, interval)
+
+def fmt(x, digits=2):
+    if x is None or not np.isfinite(float(x)):
+        return "—"
+    return f"{float(x):,.{digits}f}"
+
+# ---------- Header ----------
+st.title("🤖 Jarvis Trading Assistant V3")
+st.caption("Technical + News Sentiment + Celestial research dashboard | PAPER MODE")
 
 with st.sidebar:
     st.header("Controls")
     symbol = st.text_input("Symbol", "^NSEI")
-    period = st.selectbox("History", ["5d", "1mo", "3mo", "6mo", "1y"], index=1)
-    interval = st.selectbox("Interval", ["1m", "5m", "15m", "30m", "1h", "1d"], index=2)
-    enable_finbert = st.checkbox("Enable FinBERT", value=False)
+    interval = st.selectbox("Interval", ["5m", "15m", "30m", "1h"], index=1)
+    history = st.selectbox("History", ["5d", "1mo", "3mo"], index=1)
     news_query = st.text_input("News query", "Nifty 50 India markets")
+    enable_finbert = st.checkbox("Enable FinBERT (optional)", False)
+    refresh = st.button("🔄 Refresh data", use_container_width=True)
     st.info("PAPER MODE: no real broker orders are sent.")
+    st.caption("Educational/research tool. Signals are not guaranteed and should not be treated as financial advice.")
 
-@st.cache_data(ttl=60)
-def load_data(symbol, period, interval):
-    try:
-        df = yf.download(
-            symbol, period=period, interval=interval,
-            auto_adjust=False, progress=False, group_by="column"
-        )
-        if df is None or df.empty:
-            return pd.DataFrame()
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [str(c[0]).lower() for c in df.columns]
-        else:
-            df.columns = [str(c).lower() for c in df.columns]
-        required = ["open", "high", "low", "close", "volume"]
-        if not all(c in df.columns for c in required):
-            return pd.DataFrame()
-        out = df[required].copy()
-        for c in required:
-            out[c] = pd.to_numeric(out[c], errors="coerce")
-        return out.dropna(subset=["open", "high", "low", "close"])
-    except Exception as e:
-        st.error(f"Data error: {e}")
-        return pd.DataFrame()
+if refresh:
+    st.cache_data.clear()
+    st.rerun()
 
-df = load_data(symbol, period, interval)
-if df.empty:
-    st.error("Market data could not be loaded. Try ^NSEI or refresh the app.")
+# ---------- Data ----------
+try:
+    df = load_market(symbol.strip() or "^NSEI", interval)
+except Exception as e:
+    st.error(f"Market data error: {e}")
     st.stop()
 
-tech_engine = TechnicalAnalyzer(df)
-tech = tech_engine.generate_features()
-tech_signal = tech_engine.evaluate_signals()
+if df is None or df.empty:
+    st.error("No market data returned. Try ^NSEI and 5m/15m again.")
+    st.stop()
 
-sentiment = SentimentEngine(enable_finbert=enable_finbert)
-sent_score, headlines = sentiment.aggregate_market_sentiment(news_query)
-
-astro = CelestialEngine()
-astro_result = astro.analyze(datetime.now(timezone.utc))
-
-aggregator = MasterAggregator()
-decision = aggregator.decide(
-    technical=tech_signal,
-    sentiment_score=sent_score,
-    celestial=astro_result,
-)
-
-last_price = float(tech["close"].iloc[-1])
-atr = float(tech["atr"].iloc[-1]) if pd.notna(tech["atr"].iloc[-1]) else 0.0
-
-risk = RiskManager()
-levels = risk.calculate(
-    entry=last_price,
-    atr=atr,
-    action=decision["action"],
-)
-
-c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("Price", f"{last_price:,.2f}")
-c2.metric("Action", decision["action"])
-c3.metric("Confidence", f'{decision["confidence"]:+.0f}/100')
-c4.metric("Technical", f'{tech_signal["score"]:+.0f}')
-c5.metric("Regime", decision["regime"])
-
-st.subheader("📊 Market Chart")
+# Apply requested history locally when possible
 try:
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
-    chart_df = tech.tail(250).copy()
-    fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True,
-        vertical_spacing=0.05, row_heights=[0.72, 0.28]
-    )
-    fig.add_trace(go.Candlestick(
-        x=chart_df.index, open=chart_df["open"], high=chart_df["high"],
-        low=chart_df["low"], close=chart_df["close"], name="Price"
-    ), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["ema_fast"],
-                             name="EMA 12", mode="lines"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["ema_slow"],
-                             name="EMA 26", mode="lines"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["vwap"],
-                             name="VWAP", mode="lines"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=chart_df.index, y=chart_df["rsi"],
-                             name="RSI", mode="lines"), row=2, col=1)
-    fig.add_hline(y=70, row=2, col=1)
-    fig.add_hline(y=30, row=2, col=1)
-    fig.update_layout(
-        height=650, xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=20, b=10),
-        template="plotly_dark"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    now = pd.Timestamp.now(tz="UTC")
+    if history == "5d":
+        df = df[df.index >= now - pd.Timedelta(days=5)]
+    elif history == "1mo":
+        df = df[df.index >= now - pd.Timedelta(days=31)]
+    elif history == "3mo":
+        df = df[df.index >= now - pd.Timedelta(days=95)]
 except Exception:
-    st.line_chart(tech[["close", "ema_fast", "ema_slow", "vwap"]].tail(250), height=500)
+    pass
 
-tcol, scol, acol = st.columns(3)
+if len(df) < 30:
+    st.warning(f"Only {len(df)} candles are available. Some indicators may be unavailable.")
 
-with tcol:
+# ---------- Engines ----------
+agg = MasterAggregator()
+result = agg.analyze(
+    df=df,
+    symbol=symbol.strip() or "^NSEI",
+    news_query=news_query,
+    enable_finbert=enable_finbert,
+)
+
+tech = result["technical"]
+sent = result["sentiment"]
+astro = result["celestial"]
+decision = result["decision"]
+levels = result["levels"]
+
+# ---------- Top metrics ----------
+c1, c2, c3, c4, c5 = st.columns(5)
+c1.metric("Price", fmt(result["price"]))
+c2.metric("Signal", decision["signal"])
+c3.metric("Confidence", f'{decision["confidence"]:+.0f}/100')
+c4.metric("Technical", f'{decision["technical_score"]:+.0f}')
+c5.metric("Bull/Bear", f'{decision["bull_probability"]:.0f}% / {decision["bear_probability"]:.0f}%')
+
+# ---------- Chart ----------
+st.subheader("📈 Market Chart")
+plot_df = df.tail(min(250, len(df))).copy()
+fig = go.Figure()
+fig.add_trace(go.Candlestick(
+    x=plot_df.index, open=plot_df["open"], high=plot_df["high"],
+    low=plot_df["low"], close=plot_df["close"], name="Price"
+))
+for col, name in [("ema_fast", "EMA Fast"), ("ema_slow", "EMA Slow"), ("vwap", "VWAP")]:
+    if col in plot_df.columns:
+        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], mode="lines", name=name))
+fig.update_layout(
+    height=560, xaxis_rangeslider_visible=False,
+    margin=dict(l=10, r=10, t=10, b=10),
+    legend=dict(orientation="h")
+)
+st.plotly_chart(fig, use_container_width=True)
+
+# ---------- Engine cards ----------
+a, b, c = st.columns(3)
+
+with a:
     st.subheader("📈 Technical")
-    st.write(f"Trend: **{tech_signal['trend']}**")
-    st.write(f"RSI: **{tech['rsi'].iloc[-1]:.2f}**")
-    st.write(f"MACD: **{tech['macd'].iloc[-1]:.4f}**")
-    st.write(f"ATR: **{atr:.2f}**")
-    vwap = tech["vwap"].iloc[-1]
-    st.write(f"VWAP: **{vwap:.2f}**" if pd.notna(vwap) else "VWAP: **Unavailable**")
-    adx = tech["adx"].iloc[-1]
-    st.write(f"ADX: **{adx:.2f}**" if pd.notna(adx) else "ADX: **Unavailable**")
-    st.write(f"DI+: **{tech['di_plus'].iloc[-1]:.2f}**")
-    st.write(f"DI-: **{tech['di_minus'].iloc[-1]:.2f}**")
+    st.write(f"Trend: **{tech['trend']}**")
+    st.write(f"RSI: **{fmt(tech['rsi'])}**")
+    st.write(f"MACD: **{fmt(tech['macd'], 4)}**")
+    st.write(f"ATR: **{fmt(tech['atr'])}**")
+    st.write(f"VWAP: **{fmt(tech['vwap'])}**")
+    st.write(f"ADX: **{fmt(tech['adx'])}**")
+    st.write(f"DI+: **{fmt(tech['di_plus'])}**")
+    st.write(f"DI-: **{fmt(tech['di_minus'])}**")
+    st.write(f"Technical score: **{tech['score']:+.0f}**")
 
-with scol:
+with b:
     st.subheader("📰 Sentiment")
-    st.write(f"Score: **{sent_score:+.2f}**")
-    st.write(f"Status: **{sentiment.status(sent_score, headlines)}**")
-    for h in headlines[:7]:
-        st.caption("• " + h)
+    st.write(f"Score: **{sent['score']:+.2f}**")
+    st.write(f"Status: **{sent['status']}**")
+    st.write(f"Articles used: **{sent['articles_used']}**")
+    if sent["headlines"]:
+        for h in sent["headlines"][:5]:
+            st.caption("• " + h)
+    else:
+        st.caption("No usable news returned right now.")
 
-with acol:
+with c:
     st.subheader("🌙 Celestial")
-    st.write(f"Score: **{astro_result['score']:+.0f}**")
-    st.write(f"Moon: **{astro_result['moon_longitude']:.2f}°**")
-    st.write(f"Nakshatra: **{astro_result['nakshatra']}**")
-    st.write(f"Moon sign: **{astro_result['moon_sign']}**")
-    st.write(f"Tithi: **{astro_result['tithi']:.1f}**")
-    st.write(f"Retrograde: **{', '.join(astro_result['retrograde']) or 'None'}**")
-    st.caption("Celestial/SBC/Ashtakavarga values are an experimental research layer, not a scientifically validated predictor.")
+    st.write(f"Score: **{astro['score']:+.0f}**")
+    st.write(f"Moon: **{fmt(astro['moon_longitude'])}°**")
+    st.write(f"Moon sign: **{astro['moon_sign']}**")
+    st.write(f"Nakshatra: **{astro['nakshatra']}**")
+    st.write(f"Tithi: **{astro['tithi_name']} ({fmt(astro['tithi_number'], 0)})**")
+    st.write(f"Retrograde: **{astro['retrograde']}**")
+    st.caption("Celestial layer is experimental research, not a scientifically validated predictor.")
 
+# ---------- Master Decision ----------
 st.subheader("🎯 Master Decision")
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Technical", f'{tech_signal["score"]:+.0f}')
-m2.metric("Sentiment", f'{sent_score:+.2f}')
-m3.metric("Celestial", f'{astro_result["score"]:+.0f}')
+m1.metric("Technical", f'{decision["technical_score"]:+.0f}')
+m2.metric("Sentiment", f'{decision["sentiment_score"]:+.2f}')
+m3.metric("Celestial", f'{decision["celestial_score"]:+.0f}')
 m4.metric("Confidence", f'{decision["confidence"]:+.0f}')
 
-st.info(f"**Decision:** {decision['action']}  |  {decision['reason']}")
+st.info(
+    f'Decision: **{decision["signal"]}** | '
+    f'T/S/C = {decision["technical_score"]:+.0f}/{decision["sentiment_score"]:+.2f}/{decision["celestial_score"]:+.0f} | '
+    f'weights = 0.65/0.25/0.10'
+)
 
-if decision["action"] in ("BUY CALL", "BUY PUT", "SELL / EXIT"):
-    st.subheader("🛡️ Risk Levels")
-    r1, r2, r3, r4 = st.columns(4)
-    r1.metric("Entry", f'{levels["entry"]:,.2f}')
-    r2.metric("Stop Loss", f'{levels["sl"]:,.2f}')
-    r3.metric("Target 1", f'{levels["tp1"]:,.2f}')
-    r4.metric("Target 2", f'{levels["tp2"]:,.2f}')
+# ---------- Trade plan ----------
+st.subheader("🎯 Trade Plan")
+p1, p2, p3, p4, p5 = st.columns(5)
+p1.metric("Direction", levels["direction"])
+p2.metric("Entry", fmt(levels["entry"]))
+p3.metric("Stop Loss", fmt(levels["stop_loss"]))
+p4.metric("Target 1", fmt(levels["target1"]))
+p5.metric("Target 2", fmt(levels["target2"]))
+
+if decision["signal"] in ("BUY CALL", "BUY PUT"):
+    st.success(
+        f'Potential {decision["signal"]} setup | '
+        f'Entry {fmt(levels["entry"])} | SL {fmt(levels["stop_loss"])} | '
+        f'T1 {fmt(levels["target1"])} | T2 {fmt(levels["target2"])}'
+    )
 else:
-    st.write("⏳ No trade: wait for stronger multi-engine confluence.")
+    st.warning("⏳ No trade: wait for stronger multi-engine confluence.")
 
+# ---------- Details ----------
 with st.expander("🔬 Detailed Engine Data"):
     st.json({
-        "technical": tech_signal,
-        "sentiment": {"score": sent_score, "headlines": headlines[:10]},
-        "celestial": astro_result,
-        "master": decision,
+        "technical": tech,
+        "sentiment": sent,
+        "celestial": astro,
+        "decision": decision,
+        "levels": levels,
     })
 
-paper = PaperExecutionEngine()
+# ---------- Paper journal ----------
+st.subheader("📝 Paper Trading")
+journal = PaperExecutionEngine()
 if st.button("Record Current Decision in Paper Journal"):
-    paper.record({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    journal.record({
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "symbol": symbol,
-        "price": last_price,
-        "action": decision["action"],
+        "interval": interval,
+        "signal": decision["signal"],
+        "price": result["price"],
         "confidence": decision["confidence"],
-        "technical": tech_signal["score"],
-        "sentiment": sent_score,
-        "celestial": astro_result["score"],
-        "sl": levels["sl"],
-        "tp1": levels["tp1"],
-        "tp2": levels["tp2"],
+        "entry": levels["entry"],
+        "stop_loss": levels["stop_loss"],
+        "target1": levels["target1"],
+        "target2": levels["target2"],
     })
     st.success("Decision recorded in paper journal.")
+
+try:
+    trades = journal.read()
+    if not trades.empty:
+        st.dataframe(trades.tail(20), use_container_width=True, hide_index=True)
+except Exception:
+    pass

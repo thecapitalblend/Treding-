@@ -1,45 +1,24 @@
-# Jarvis Trading Assistant V2
+# Jarvis Trading Assistant V3
 
-Streamlit research dashboard combining:
+Streamlit paper-trading research dashboard for Nifty 50.
 
-- Technical analysis: EMA, MACD, RSI, ATR, VWAP, ADX/DMI, volume
-- News sentiment with optional FinBERT
-- Swiss Ephemeris celestial calculations
-- Experimental SBC/Vedha/Ashtakavarga research fields
-- Master ensemble confidence
-- BUY CALL / BUY PUT / HOLD / SELL-EXIT research actions
-- ATR-based paper risk levels
-- Paper trade journal
+## Structure
 
-## GitHub structure
+- `app.py` — Streamlit UI
+- `core/` — master aggregation, risk and paper journal
+- `modules/` — technical, sentiment and celestial engines
+- `config.yaml` — settings
+- `requirements.txt` — dependencies
 
-Upload the files exactly like this:
+## GitHub / Streamlit deployment
 
-Jarvis-Trading-Assistant/
-├── app.py
-├── config.yaml
-├── requirements.txt
-├── core/
-│   ├── __init__.py
-│   ├── aggregator.py
-│   ├── paper_execution.py
-│   └── risk_manager.py
-├── modules/
-│   ├── __init__.py
-│   ├── astro_engine.py
-│   ├── sentiment_engine.py
-│   └── technical_engine.py
-├── data/
-└── logs/
+Upload the complete folder structure. `app.py`, `config.yaml` and `requirements.txt` stay in the repository root.
+
+After upload, reboot/redeploy the Streamlit app.
 
 ## Important
 
-This version is PAPER MODE. It does not connect to Dhan/Fyers and does not send real orders.
-
-FinBERT downloads model files on first activation and can be resource intensive on Streamlit Cloud. Keep it OFF until the base dashboard is stable.
-
-Celestial/SBC/astrology signals are experimental and should not be treated as scientifically validated predictors or guaranteed trading signals.
-
-## Streamlit
-
-Set the main file to `app.py` and reboot/redeploy after committing changes.
+- No real broker orders are sent.
+- News and Yahoo Finance data can be unavailable or delayed.
+- Celestial calculations are experimental and are not scientifically validated predictors.
+- BUY CALL / BUY PUT are directional research signals, not automatic option-contract recommendations.

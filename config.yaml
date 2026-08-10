@@ -1,24 +1,17 @@
 app:
-  mode: PAPER
-  timezone: Asia/Kolkata
+  name: Jarvis Trading Assistant
+  mode: paper
+
+market:
+  default_symbol: "^NSEI"
+  default_interval: "15m"
+
+decision:
+  technical_weight: 0.65
+  sentiment_weight: 0.25
+  celestial_weight: 0.10
 
 risk:
-  sl_atr: 1.5
-  tp1_atr: 1.5
-  tp2_atr: 3.0
-  max_daily_loss_pct: 1.0
-
-ensemble:
-  technical: 0.60
-  sentiment: 0.25
-  celestial: 0.15
-
-broker:
-  enabled: false
-  provider: none
-  client_id: ""
-  access_token: ""
-
-notes:
-  - "Never place real orders until paper/backtest validation is complete."
-  - "Celestial analytics are experimental research features."
+  sl_atr: 1.2
+  target1_atr: 1.5
+  target2_atr: 2.5
