@@ -18,9 +18,9 @@ class MasterAggregator:
         self.astro_engine = CelestialEngine()
 
     @staticmethod
-    def fetch_market_data(symbol: str, interval: str = "15m") -> pd.DataFrame:
-        period_map = {"5m": "1mo", "15m": "1mo", "30m": "1mo", "1h": "3mo"}
-        period = period_map.get(interval, "1mo")
+    def fetch_market_data(symbol: str, interval: str = "15m", period: str | None = None) -> pd.DataFrame:
+        if period is None:
+            period = {"5m": "1mo", "15m": "1mo", "30m": "1mo", "1h": "3mo"}.get(interval, "1mo")
         ticker = yf.Ticker(symbol)
         df = ticker.history(
             period=period, interval=interval,
