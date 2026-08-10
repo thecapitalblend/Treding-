@@ -1,0 +1,26 @@
+app:
+  name: "Jarvis Trading Assistant"
+  mode: "paper"
+  timezone: "Asia/Kolkata"
+  default_symbol: "^NSEI"
+  interval: "5m"
+
+technical:
+  ema_fast: 12
+  ema_slow: 26
+  rsi_length: 14
+  atr_length: 14
+
+aggregator:
+  technical_weight: 0.55
+  sentiment_weight: 0.25
+  celestial_weight: 0.20
+  buy_threshold: 60
+  sell_threshold: -60
+  risk_off_threshold: -85
+
+risk:
+  account_size: 100000
+  risk_per_trade_pct: 1.0
+  atr_stop_multiplier: 1.5
+  max_quantity: 1000
