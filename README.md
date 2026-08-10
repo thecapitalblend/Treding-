@@ -1,24 +1,30 @@
-# Jarvis Trading Assistant V3
+# Jarvis Trading Assistant V4
 
-Streamlit paper-trading research dashboard for Nifty 50.
+Paper-mode Streamlit research dashboard.
 
-## Structure
+## V4 celestial layer
+- Swiss Ephemeris / pyswisseph
+- Current India time converted to UTC before Julian-day calculation
+- Sidereal Lahiri zodiac
+- Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn
+- Mean Rahu and calculated Ketu
+- Longitude, sign, degree, speed and retrograde state
+- Moon Rashi
+- Nakshatra + Pada
+- Tithi + elapsed percentage
+- Yoga
+- Karana
+- Lahiri ayanamsa
+- Bounded transparent celestial research score
 
-- `app.py` — Streamlit UI
-- `core/` — master aggregation, risk and paper journal
-- `modules/` — technical, sentiment and celestial engines
-- `config.yaml` — settings
-- `requirements.txt` — dependencies
+The celestial layer is experimental astrology research and is not a scientifically validated predictor of market prices.
 
-## GitHub / Streamlit deployment
+## Deploy
+Upload/replace the files in the repository, keeping:
+core/
+modules/
+app.py
+requirements.txt
+config.yaml
 
-Upload the complete folder structure. `app.py`, `config.yaml` and `requirements.txt` stay in the repository root.
-
-After upload, reboot/redeploy the Streamlit app.
-
-## Important
-
-- No real broker orders are sent.
-- News and Yahoo Finance data can be unavailable or delayed.
-- Celestial calculations are experimental and are not scientifically validated predictors.
-- BUY CALL / BUY PUT are directional research signals, not automatic option-contract recommendations.
+Then reboot the Streamlit app.

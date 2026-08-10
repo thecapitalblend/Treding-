@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,21 +9,29 @@ from pathlib import Path
 from core.aggregator import MasterAggregator
 from core.paper_execution import PaperExecutionEngine
 
-st.set_page_config(page_title="Jarvis Trading Assistant V3", page_icon="🤖", layout="wide")
+st.set_page_config(
+    page_title="Jarvis Trading Assistant V4",
+    page_icon="🤖",
+    layout="wide"
+)
 
-# ---------- Helpers ----------
 @st.cache_data(ttl=60, show_spinner=False)
 def load_market(symbol: str, interval: str):
     return MasterAggregator.fetch_market_data(symbol, interval)
 
 def fmt(x, digits=2):
-    if x is None or not np.isfinite(float(x)):
+    try:
+        v = float(x)
+        if not np.isfinite(v):
+            return "—"
+        return f"{v:,.{digits}f}"
+    except Exception:
         return "—"
-    return f"{float(x):,.{digits}f}"
 
-# ---------- Header ----------
-st.title("🤖 Jarvis Trading Assistant V3")
-st.caption("Technical + News Sentiment + Celestial research dashboard | PAPER MODE")
+st.title("🤖 Jarvis Trading Assistant V4")
+st.caption(
+    "Technical + News Sentiment + Real-time Vedic Transit Research | PAPER MODE"
+)
 
 with st.sidebar:
     st.header("Controls")
@@ -33,13 +42,16 @@ with st.sidebar:
     enable_finbert = st.checkbox("Enable FinBERT (optional)", False)
     refresh = st.button("🔄 Refresh data", use_container_width=True)
     st.info("PAPER MODE: no real broker orders are sent.")
-    st.caption("Educational/research tool. Signals are not guaranteed and should not be treated as financial advice.")
+    st.caption(
+        "Celestial calculations use Swiss Ephemeris, sidereal Lahiri zodiac, "
+        "and the current India-time instant. Astrology is experimental research, "
+        "not a scientifically validated market predictor."
+    )
 
 if refresh:
     st.cache_data.clear()
     st.rerun()
 
-# ---------- Data ----------
 try:
     df = load_market(symbol.strip() or "^NSEI", interval)
 except Exception as e:
@@ -50,7 +62,6 @@ if df is None or df.empty:
     st.error("No market data returned. Try ^NSEI and 5m/15m again.")
     st.stop()
 
-# Apply requested history locally when possible
 try:
     now = pd.Timestamp.now(tz="UTC")
     if history == "5d":
@@ -65,7 +76,6 @@ except Exception:
 if len(df) < 30:
     st.warning(f"Only {len(df)} candles are available. Some indicators may be unavailable.")
 
-# ---------- Engines ----------
 agg = MasterAggregator()
 result = agg.analyze(
     df=df,
@@ -80,15 +90,16 @@ astro = result["celestial"]
 decision = result["decision"]
 levels = result["levels"]
 
-# ---------- Top metrics ----------
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Price", fmt(result["price"]))
 c2.metric("Signal", decision["signal"])
 c3.metric("Confidence", f'{decision["confidence"]:+.0f}/100')
 c4.metric("Technical", f'{decision["technical_score"]:+.0f}')
-c5.metric("Bull/Bear", f'{decision["bull_probability"]:.0f}% / {decision["bear_probability"]:.0f}%')
+c5.metric(
+    "Bull/Bear",
+    f'{decision["bull_probability"]:.0f}% / {decision["bear_probability"]:.0f}%'
+)
 
-# ---------- Chart ----------
 st.subheader("📈 Market Chart")
 plot_df = df.tail(min(250, len(df))).copy()
 fig = go.Figure()
@@ -96,9 +107,14 @@ fig.add_trace(go.Candlestick(
     x=plot_df.index, open=plot_df["open"], high=plot_df["high"],
     low=plot_df["low"], close=plot_df["close"], name="Price"
 ))
-for col, name in [("ema_fast", "EMA Fast"), ("ema_slow", "EMA Slow"), ("vwap", "VWAP")]:
+for col, name in [
+    ("ema_fast", "EMA Fast"), ("ema_slow", "EMA Slow"), ("vwap", "VWAP")
+]:
     if col in plot_df.columns:
-        fig.add_trace(go.Scatter(x=plot_df.index, y=plot_df[col], mode="lines", name=name))
+        fig.add_trace(go.Scatter(
+            x=plot_df.index, y=plot_df[col],
+            mode="lines", name=name
+        ))
 fig.update_layout(
     height=560, xaxis_rangeslider_visible=False,
     margin=dict(l=10, r=10, t=10, b=10),
@@ -106,7 +122,6 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# ---------- Engine cards ----------
 a, b, c = st.columns(3)
 
 with a:
@@ -126,37 +141,66 @@ with b:
     st.write(f"Score: **{sent['score']:+.2f}**")
     st.write(f"Status: **{sent['status']}**")
     st.write(f"Articles used: **{sent['articles_used']}**")
-    if sent["headlines"]:
-        for h in sent["headlines"][:5]:
-            st.caption("• " + h)
-    else:
-        st.caption("No usable news returned right now.")
+    for h in sent.get("headlines", [])[:5]:
+        st.caption("• " + h)
 
 with c:
-    st.subheader("🌙 Celestial")
-    st.write(f"Score: **{astro['score']:+.0f}**")
-    st.write(f"Moon: **{fmt(astro['moon_longitude'])}°**")
-    st.write(f"Moon sign: **{astro['moon_sign']}**")
-    st.write(f"Nakshatra: **{astro['nakshatra']}**")
-    st.write(f"Tithi: **{astro['tithi_name']} ({fmt(astro['tithi_number'], 0)})**")
-    st.write(f"Retrograde: **{astro['retrograde']}**")
-    st.caption("Celestial layer is experimental research, not a scientifically validated predictor.")
+    st.subheader("🌙 Real-time Vedic Transit")
+    if astro["available"]:
+        st.write(f"Astro score: **{astro['score']:+.2f} / 5**")
+        st.write(f"Moon: **{fmt(astro['moon_longitude'], 4)}°**")
+        st.write(
+            f"Rashi: **{astro['moon_sign']}** "
+            f"({fmt(astro['moon_degree_in_sign'], 2)}°)"
+        )
+        st.write(
+            f"Nakshatra: **{astro['nakshatra']}** "
+            f"(Pada {astro['nakshatra_pada']})"
+        )
+        st.write(
+            f"Tithi: **{astro['tithi_name']}** "
+            f"({astro['tithi_percent']:.1f}% elapsed)"
+        )
+        st.write(f"Yoga: **{astro['yoga']}**")
+        st.write(f"Karana: **{astro['karana']}**")
+        st.write(f"Retrograde: **{astro['retrograde']}**")
+        st.caption(
+            f"IST calculation: {astro['calculated_at_ist'].replace('T', ' ')}"
+        )
+    else:
+        st.error("Celestial calculation unavailable.")
+        st.caption(astro.get("error", "Unknown Swiss Ephemeris error"))
 
-# ---------- Master Decision ----------
+st.subheader("🪐 Live Planetary Positions — Sidereal Lahiri")
+if astro["available"] and astro.get("planets"):
+    planet_df = pd.DataFrame(astro["planets"])
+    planet_df["longitude"] = planet_df["longitude"].map(lambda x: f"{x:.4f}°")
+    planet_df["degree_in_sign"] = planet_df["degree_in_sign"].map(lambda x: f"{x:.2f}°")
+    planet_df["speed"] = planet_df["speed"].map(lambda x: f"{x:.5f}")
+    planet_df["retrograde"] = planet_df["retrograde"].map(lambda x: "R" if x else "")
+    st.dataframe(planet_df, use_container_width=True, hide_index=True)
+    st.caption(
+        f"Lahiri ayanamsa: {astro['ayanamsa']:.6f}°. "
+        "Positions are geocentric sidereal transit positions."
+    )
+else:
+    st.info("Planet table will appear when Swiss Ephemeris is available.")
+
 st.subheader("🎯 Master Decision")
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Technical", f'{decision["technical_score"]:+.0f}')
 m2.metric("Sentiment", f'{decision["sentiment_score"]:+.2f}')
-m3.metric("Celestial", f'{decision["celestial_score"]:+.0f}')
+m3.metric("Celestial", f'{decision["celestial_score"]:+.2f}')
 m4.metric("Confidence", f'{decision["confidence"]:+.0f}')
 
 st.info(
     f'Decision: **{decision["signal"]}** | '
-    f'T/S/C = {decision["technical_score"]:+.0f}/{decision["sentiment_score"]:+.2f}/{decision["celestial_score"]:+.0f} | '
+    f'T/S/C = {decision["technical_score"]:+.0f}/'
+    f'{decision["sentiment_score"]:+.2f}/'
+    f'{decision["celestial_score"]:+.2f} | '
     f'weights = 0.65/0.25/0.10'
 )
 
-# ---------- Trade plan ----------
 st.subheader("🎯 Trade Plan")
 p1, p2, p3, p4, p5 = st.columns(5)
 p1.metric("Direction", levels["direction"])
@@ -174,7 +218,6 @@ if decision["signal"] in ("BUY CALL", "BUY PUT"):
 else:
     st.warning("⏳ No trade: wait for stronger multi-engine confluence.")
 
-# ---------- Details ----------
 with st.expander("🔬 Detailed Engine Data"):
     st.json({
         "technical": tech,
@@ -184,7 +227,6 @@ with st.expander("🔬 Detailed Engine Data"):
         "levels": levels,
     })
 
-# ---------- Paper journal ----------
 st.subheader("📝 Paper Trading")
 journal = PaperExecutionEngine()
 if st.button("Record Current Decision in Paper Journal"):

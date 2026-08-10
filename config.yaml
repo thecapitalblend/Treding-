@@ -1,5 +1,5 @@
 app:
-  name: Jarvis Trading Assistant
+  name: Jarvis Trading Assistant V4
   mode: paper
 
 market:
@@ -15,3 +15,9 @@ risk:
   sl_atr: 1.2
   target1_atr: 1.5
   target2_atr: 2.5
+
+celestial:
+  zodiac: sidereal
+  ayanamsa: lahiri
+  timezone: Asia/Kolkata
+  mode: real_time_transit_research
