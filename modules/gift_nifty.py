@@ -1,11 +1,26 @@
-import os,yfinance as yf
+
+import re, requests
+
+NSEIX_URL="https://www.nseix.com/"
 
 def load_gift_nifty():
-    symbols=[os.getenv('GIFT_NIFTY_SYMBOL','NIFTY_GIFT'),'GIFTNIFTY']
-    for s in symbols:
-        try:
-            h=yf.Ticker(s).history(period='5d',interval='5m',auto_adjust=False)
-            if h is not None and not h.empty:
-                c=float(h.Close.dropna().iloc[-1]); first=float(h.Close.dropna().iloc[0]); return {'available':True,'price':c,'change_pct':(c-first)/first*100 if first else 0,'source':f'Yahoo/yfinance symbol: {s}'}
-        except Exception: pass
-    return {'available':False,'message':'GIFT Nifty feed is not exposed by the configured Yahoo/yfinance symbols. Set GIFT_NIFTY_SYMBOL to a symbol supported by your provider; no value is fabricated.'}
+    try:
+        r=requests.get(NSEIX_URL,timeout=12,headers={"User-Agent":"Mozilla/5.0 JarvisTradingAssistant/3.0"})
+        r.raise_for_status()
+        html=r.text
+        # NSE IX currently exposes the near-month GIFT NIFTY future on its public page.
+        patterns=[
+            r"Near month GIFT NIFTY Future.*?([0-9]{2,3},?[0-9]{3}(?:\\.[0-9]+)?).*?([+-]?[0-9]+(?:\\.[0-9]+)?)\\s*\\(([-+]?[0-9]+(?:\\.[0-9]+)?)%\\)",
+            r"GIFT NIFTY.*?([0-9]{2,3},?[0-9]{3}(?:\\.[0-9]+)?).*?([+-]?[0-9]+(?:\\.[0-9]+)?)\\s*\\(([-+]?[0-9]+(?:\\.[0-9]+)?)%\\)"
+        ]
+        for pat in patterns:
+            m=re.search(pat,html,re.I|re.S)
+            if m:
+                return {"available":True,"price":float(m.group(1).replace(",","")),
+                        "change":float(m.group(2)),"change_pct":float(m.group(3)),
+                        "source":"NSE International Exchange (NSE IX)","url":NSEIX_URL}
+        return {"available":False,"message":"NSE IX did not expose a parsable live GIFT NIFTY value right now.",
+                "source":"NSE International Exchange (NSE IX)","url":NSEIX_URL}
+    except Exception as e:
+        return {"available":False,"message":f"NSE IX GIFT Nifty feed error: {e}",
+                "source":"NSE International Exchange (NSE IX)","url":NSEIX_URL}
