@@ -12,6 +12,13 @@ from modules.gift_nifty import load_gift_nifty
 from modules.news import load_news
 from modules.tv_widget import render_tradingview_chart, INTERVAL_MAP
 from core.broker_angelone import get_nifty_ltp
+from core.pivots import get_pivots
+from core.mtf import mtf_confirmation
+from core.backtest import backtest
+from core.events import expiry_flag
+from core.risk import position_size
+from modules.options_data import get_india_vix, get_option_chain_summary
+from modules.global_cues import get_global_cues
 
 # Cache expensive network/computation calls so the app stays smooth on every
 # widget interaction (Streamlit reruns the whole script on each change).
@@ -21,6 +28,11 @@ load_news = st.cache_data(ttl=300)(load_news)
 get_sidereal_positions = st.cache_data(ttl=300)(get_sidereal_positions)
 run_all_chakras = st.cache_data(ttl=300)(run_all_chakras)
 get_nifty_ltp = st.cache_data(ttl=5)(get_nifty_ltp)
+get_pivots = st.cache_data(ttl=3600)(get_pivots)
+mtf_confirmation = st.cache_data(ttl=60)(mtf_confirmation)
+get_india_vix = st.cache_data(ttl=60)(get_india_vix)
+get_option_chain_summary = st.cache_data(ttl=90)(get_option_chain_summary)
+get_global_cues = st.cache_data(ttl=120)(get_global_cues)
 
 st.set_page_config(page_title='Jarvis Trading Assistant', page_icon='🤖', layout='wide')
 st.title('🤖 Jarvis Trading Assistant')
@@ -36,6 +48,11 @@ with st.sidebar:
     show_volume = st.checkbox('Volume', True)
     chart_source = st.radio('Chart source', ['TradingView live embed', 'Custom (Plotly + signals)'], index=0)
     news_query = st.text_input('News query', 'Nifty 50 India markets')
+    st.divider()
+    st.subheader('Risk management')
+    capital = st.number_input('Capital (INR)', min_value=10000, value=200000, step=10000)
+    risk_pct = st.slider('Risk per trade (%)', 0.25, 5.0, 1.0, 0.25)
+    lot_size = st.number_input('NIFTY lot size', min_value=1, value=75, step=1, help='Check current NSE lot size -- it changes periodically.')
     st.info('PAPER MODE: no broker orders are sent.')
 try:
     df = add_indicators(load_market_data(symbol, period, interval))
@@ -48,6 +65,13 @@ if df.empty or len(df) < 30:
 levels = support_resistance(df)
 decision = build_decision(df, levels)
 raw_signals, signal_counts, signal_transitions = signal_history(df)
+
+exp = expiry_flag()
+if exp['expiry_today']:
+    st.error(f"⚠️ {exp['note']}")
+
+mtf = mtf_confirmation(symbol, interval, decision['trend'] if decision['trend'] != 'NEUTRAL' else ('BULLISH' if decision['technical_score']>0 else 'BEARISH'))
+
 c1,c2,c3,c4=st.columns(4)
 if symbol in ('^NSEI', 'NIFTY', 'NIFTY50', 'NIFTY 50'):
     live = get_nifty_ltp()
@@ -60,7 +84,11 @@ if symbol in ('^NSEI', 'NIFTY', 'NIFTY50', 'NIFTY 50'):
 else:
     c1.metric('Price',f"{df['Close'].iloc[-1]:,.2f}")
 c2.metric('Signal',decision['signal'])
-c3.metric('Confidence',f"{decision['confidence']:.0f}/100")
+if mtf.get('available'):
+    badge = '✅ MTF Confirmed' if mtf['aligned'] else '⚠️ MTF Conflict'
+    c3.metric('Confidence',f"{decision['confidence']:.0f}/100", badge)
+else:
+    c3.metric('Confidence',f"{decision['confidence']:.0f}/100")
 c4.metric('Technical Score',f"{decision['technical_score']:+.0f}")
 st.subheader('📈 Market Chart')
 if chart_source == 'TradingView live embed':
@@ -114,6 +142,22 @@ with tech:
     st.write(f"**DI-:** {df.DI_MINUS.iloc[-1]:.2f}")
     st.write(f"**Support:** {levels['support']:,.2f}")
     st.write(f"**Resistance:** {levels['resistance']:,.2f}")
+    piv = get_pivots(symbol)
+    if piv.get('available'):
+        st.markdown('**Classic Pivots**')
+        st.write(f"P {piv['classic']['pivot']:,.2f} | R1 {piv['classic']['r1']:,.2f} | S1 {piv['classic']['s1']:,.2f}")
+        st.write(f"R2 {piv['classic']['r2']:,.2f} | R3 {piv['classic']['r3']:,.2f} | S2 {piv['classic']['s2']:,.2f} | S3 {piv['classic']['s3']:,.2f}")
+        st.markdown('**Camarilla**')
+        st.write(f"R3 {piv['camarilla']['r3']:,.2f} | R4 {piv['camarilla']['r4']:,.2f} | S3 {piv['camarilla']['s3']:,.2f} | S4 {piv['camarilla']['s4']:,.2f}")
+        st.caption(f"Prev day H {piv['prev_high']:,.2f} / L {piv['prev_low']:,.2f} / C {piv['prev_close']:,.2f}")
+    else:
+        st.caption(piv.get('message',''))
+    if mtf.get('available'):
+        st.markdown('**Multi-timeframe confirmation**')
+        st.write(f"{interval} trend: **{mtf['base_trend']}** | {mtf['higher_interval']} trend: **{mtf['higher_trend']}**")
+        st.write('✅ Aligned' if mtf['aligned'] else '⚠️ Not aligned -- lower confidence')
+    else:
+        st.caption(mtf.get('message',''))
 with ctx:
     st.subheader('📰 Market Context')
     news=load_news(news_query)
@@ -144,6 +188,39 @@ with astro:
         st.dataframe(pd.DataFrame(a['planets']),hide_index=True,use_container_width=True)
     else: st.error(a['message'])
 
+st.subheader('📊 Options Data & Global Cues')
+oc1, oc2 = st.columns(2)
+with oc1:
+    st.markdown('**Options — NIFTY**')
+    vix = get_india_vix()
+    if vix.get('available'):
+        st.metric('India VIX', f"{vix['vix']:.2f}", f"{vix['change_pct']:+.2f}%")
+        if vix['vix'] > 20:
+            st.caption('High VIX -- widen stops, expect bigger swings.')
+    else:
+        st.caption(f"India VIX unavailable: {vix.get('message','')}")
+    oc = get_option_chain_summary()
+    if oc.get('available'):
+        pcr_txt = f"{oc['pcr']:.2f}" if oc['pcr'] is not None else 'n/a'
+        st.write(f"**PCR (OI):** {pcr_txt}")
+        st.write(f"**Total Call OI:** {oc['total_ce_oi']:,} | **Total Put OI:** {oc['total_pe_oi']:,}")
+        if oc.get('max_pain'):
+            st.write(f"**Max Pain:** {oc['max_pain']:,.0f}")
+        if oc.get('underlying'):
+            st.caption(f"NSE underlying: {oc['underlying']:,.2f}")
+    else:
+        st.warning(f"Option chain unavailable: {oc.get('message','')}")
+        st.caption('NSE frequently blocks server-side/cloud IPs for this endpoint. Runs more reliably from a residential IP or with a proper browser session/proxy.')
+with oc2:
+    st.markdown('**Global cues**')
+    cues = get_global_cues()
+    for label, v in cues.items():
+        if v.get('available'):
+            st.metric(label, f"{v['price']:,.2f}", f"{v['change_pct']:+.2f}%")
+        else:
+            st.caption(f"{label}: unavailable")
+
+
 if symbol in ('^NSEI', 'NIFTY', 'NIFTY50', 'NIFTY 50'):
     st.subheader('🕉️ Medini Jyotish — 10 Chakra Analysis (NIFTY 50, Experimental)')
     ch = run_all_chakras()
@@ -160,4 +237,33 @@ st.subheader('🎯 Master Decision')
 m1,m2,m3,m4=st.columns(4)
 m1.metric('Technical',f"{decision['technical_score']:+.0f}"); m2.metric('Context',f"{decision['context_score']:+.0f}"); m3.metric('Celestial',f"{decision['celestial_score']:+.0f}"); m4.metric('Confidence',f"{decision['confidence']:.0f}")
 st.info(f"Decision: **{decision['signal']}** | Entry {decision['entry']:,.2f} | SL {decision['stop']:,.2f} | T1 {decision['target1']:,.2f} | T2 {decision['target2']:,.2f}")
+
+st.subheader('💰 Position Sizing')
+if decision['signal'] != 'HOLD':
+    ps = position_size(capital, risk_pct, decision['entry'], decision['stop'], lot_size)
+    if ps.get('available'):
+        p1,p2,p3 = st.columns(3)
+        p1.metric('Max lots', ps['max_lots'])
+        p2.metric('Quantity', ps['actual_qty'])
+        p3.metric('Actual risk (INR)', f"{ps['actual_risk']:,.0f}")
+        if ps.get('warning'):
+            st.warning(ps['warning'])
+    else:
+        st.caption(ps.get('message',''))
+else:
+    st.caption('No active signal -- nothing to size.')
+
+st.subheader('📉 Backtest — Signal Engine (this loaded window)')
+bt = backtest(df)
+if bt.get('available'):
+    b1,b2,b3 = st.columns(3)
+    b1.metric('Trades', bt['trade_count'])
+    b2.metric('Win rate', f"{bt['win_rate']:.1f}%")
+    b3.metric('Avg R-multiple', f"{bt['avg_r_multiple']:+.2f}R")
+    st.caption('Bar-close simulation on the currently loaded period/interval only -- no slippage/costs modeled. Not a guarantee of future performance.')
+    with st.expander('Trade log'):
+        st.dataframe(pd.DataFrame(bt['trades']), hide_index=True, use_container_width=True)
+else:
+    st.caption(bt.get('message',''))
+
 st.caption('Astrology is an experimental research layer and is not a scientifically validated predictor. Paper mode only.')
