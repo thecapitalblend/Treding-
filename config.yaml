@@ -1,23 +1,20 @@
 app:
-  name: Jarvis Trading Assistant V4
-  mode: paper
-
+  paper_mode: true
 market:
-  default_symbol: "^NSEI"
+  symbol: "^NSEI"
+  timezone: "Asia/Kolkata"
   default_interval: "15m"
-
-decision:
-  technical_weight: 0.65
-  sentiment_weight: 0.25
-  celestial_weight: 0.10
-
-risk:
-  sl_atr: 1.2
-  target1_atr: 1.5
-  target2_atr: 2.5
-
-celestial:
-  zodiac: sidereal
-  ayanamsa: lahiri
-  timezone: Asia/Kolkata
-  mode: real_time_transit_research
+  default_period: "1mo"
+technical:
+  ema_fast: 20
+  ema_slow: 50
+  sma_long: 200
+  rsi: 14
+  atr: 14
+  adx: 14
+  sr_lookback: 80
+astro:
+  system: "Sidereal Lahiri"
+  location: "New Delhi, India"
+gift_nifty:
+  symbol_env: "GIFT_NIFTY_SYMBOL"

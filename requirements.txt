@@ -1,8 +1,7 @@
-streamlit==1.61.1
-pandas>=2.2,<3
-numpy>=1.26,<3
-plotly>=5.20,<7
-yfinance>=0.2.50,<2
-requests>=2.31,<3
-PyYAML>=6.0,<7
-pysweph==2.10.3.6
+streamlit>=1.48
+plotly>=6.0
+pandas>=2.2
+numpy>=2.0
+yfinance>=0.2.60
+PyYAML>=6.0
+pyswisseph>=2.10.3.2

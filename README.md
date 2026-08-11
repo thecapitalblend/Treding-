@@ -1,30 +1,20 @@
-# Jarvis Trading Assistant V4
+# Jarvis Trading Assistant v2
 
-Paper-mode Streamlit research dashboard.
+TradingView-style NIFTY chart layer with real OHLC candlesticks, EMA 20/50, SMA 200, VWAP, volume, support/resistance, RSI, MACD, ATR, ADX/DI, paper-mode decision engine, Sidereal Lahiri planetary positions, and a configurable GIFT Nifty connector.
 
-## V4 celestial layer
-- Swiss Ephemeris / pyswisseph
-- Current India time converted to UTC before Julian-day calculation
-- Sidereal Lahiri zodiac
-- Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn
-- Mean Rahu and calculated Ketu
-- Longitude, sign, degree, speed and retrograde state
-- Moon Rashi
-- Nakshatra + Pada
-- Tithi + elapsed percentage
-- Yoga
-- Karana
-- Lahiri ayanamsa
-- Bounded transparent celestial research score
+## Run
 
-The celestial layer is experimental astrology research and is not a scientifically validated predictor of market prices.
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-## Deploy
-Upload/replace the files in the repository, keeping:
-core/
-modules/
-app.py
-requirements.txt
-config.yaml
+## GIFT Nifty
 
-Then reboot the Streamlit app.
+Yahoo/yfinance does not guarantee a universal GIFT Nifty symbol. The app tries `NIFTY_GIFT` and `GIFTNIFTY`. If your provider uses another symbol, set `GIFT_NIFTY_SYMBOL` in the environment. The app never invents a price.
+
+For true exchange-grade real-time data, replace the market-data modules with a broker/exchange feed. Yahoo/yfinance is a research-data source, not an execution-grade feed.
+
+Astrology uses Swiss Ephemeris + Lahiri sidereal mode for astronomical positions. It is an experimental/non-scientifically-validated decision layer, not a guaranteed market predictor.
+
+The app is PAPER MODE and sends no broker orders.
