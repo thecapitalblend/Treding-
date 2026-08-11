@@ -34,6 +34,7 @@ if df.empty or len(df) < 30:
     st.stop()
 levels = support_resistance(df)
 decision = build_decision(df, levels)
+raw_signals, signal_counts, signal_transitions = signal_history(df)
 c1,c2,c3,c4=st.columns(4)
 c1.metric('Price',f"{df['Close'].iloc[-1]:,.2f}")
 c2.metric('Signal',decision['signal'])
@@ -51,12 +52,28 @@ if show_vwap and df.VWAP.notna().any():
 if show_sr:
     for price,name in [(levels['support'],'Support'),(levels['resistance'],'Resistance')]:
         fig.add_hline(y=price,line_dash='dash',annotation_text=f'{name} {price:,.2f}',annotation_position='top left',row=1,col=1)
+buy_call_idx=df.index[raw_signals=='BUY CALL']
+buy_put_idx=df.index[raw_signals=='BUY PUT']
+fig.add_trace(go.Scatter(x=buy_call_idx,y=df.loc[buy_call_idx,'Low']*0.9995,mode='markers',
+    marker=dict(symbol='triangle-up',size=10),name='BUY CALL'),row=1,col=1)
+fig.add_trace(go.Scatter(x=buy_put_idx,y=df.loc[buy_put_idx,'High']*1.0005,mode='markers',
+    marker=dict(symbol='triangle-down',size=10),name='BUY PUT'),row=1,col=1)
 if show_volume:
     fig.add_trace(go.Bar(x=df.index,y=df.Volume,name='Volume',opacity=0.45),row=2,col=1)
 fig.update_layout(height=720,template='plotly_dark',xaxis_rangeslider_visible=False,hovermode='x unified',margin=dict(l=20,r=20,t=20,b=20),legend=dict(orientation='h',y=1.02))
 fig.update_yaxes(title_text='Price',row=1,col=1)
 if show_volume: fig.update_yaxes(title_text='Volume',row=2,col=1)
 st.plotly_chart(fig,use_container_width=True)
+st.subheader('🎯 Signal Statistics')
+ss1,ss2,ss3,ss4=st.columns(4)
+ss1.metric('BUY CALL signals',signal_counts.get('BUY CALL',0))
+ss2.metric('BUY PUT signals',signal_counts.get('BUY PUT',0))
+ss3.metric('HOLD bars',signal_counts.get('HOLD',0))
+ss4.metric('Signal transitions',len(signal_transitions))
+if signal_transitions:
+    last=signal_transitions[-1]
+    st.caption(f"Last signal: **{last[1]}** | {last[0]} | score {last[2]:+.0f}")
+
 tech,ctx,astro=st.columns(3)
 with tech:
     st.subheader('📈 Technical')
@@ -73,13 +90,22 @@ with tech:
 with ctx:
     st.subheader('📰 Market Context')
     news=load_news(news_query)
-    if news:
-        for item in news[:5]: st.write('• '+item)
-    else: st.write('No news returned.')
+    if news and not news[0].get('error'):
+        for item in news[:8]:
+            st.markdown(f"• **{item['source']}** — {item['title']}")
+            if item.get('link'): st.caption(item['link'])
+    elif news: st.warning(news[0]['error'])
+    else: st.info('No trusted article matched the query.')
+    st.caption('Trusted sources: Reuters, CNBC-TV18, Moneycontrol, Economic Times.')
     gift=load_gift_nifty()
     st.subheader('🌏 GIFT Nifty')
-    if gift['available']: st.metric('GIFT Nifty',f"{gift['price']:,.2f}",f"{gift['change_pct']:+.2f}%"); st.caption(gift['source'])
-    else: st.warning(gift['message'])
+    if gift['available']:
+        delta=None if gift.get('change_pct') is None else f"{gift['change_pct']:+.2f}%"
+        st.metric('GIFT Nifty',f"{gift['price']:,.2f}",delta)
+        st.caption(f"{gift['source']} — {gift['url']}")
+    else:
+        st.warning(gift['message'])
+        st.caption(f"{gift.get('source','NSE IX')} — {gift.get('url','')}")
 with astro:
     st.subheader('🌙 Live Vedic Transit — Sidereal Lahiri')
     a=get_sidereal_positions()
