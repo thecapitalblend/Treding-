@@ -11,6 +11,7 @@ from core.chakra import run_all_chakras
 from modules.gift_nifty import load_gift_nifty
 from modules.news import load_news
 from modules.tv_widget import render_tradingview_chart, INTERVAL_MAP
+from core.broker_angelone import get_nifty_ltp
 
 # Cache expensive network/computation calls so the app stays smooth on every
 # widget interaction (Streamlit reruns the whole script on each change).
@@ -19,6 +20,7 @@ load_gift_nifty = st.cache_data(ttl=30)(load_gift_nifty)
 load_news = st.cache_data(ttl=300)(load_news)
 get_sidereal_positions = st.cache_data(ttl=300)(get_sidereal_positions)
 run_all_chakras = st.cache_data(ttl=300)(run_all_chakras)
+get_nifty_ltp = st.cache_data(ttl=5)(get_nifty_ltp)
 
 st.set_page_config(page_title='Jarvis Trading Assistant', page_icon='🤖', layout='wide')
 st.title('🤖 Jarvis Trading Assistant')
@@ -47,7 +49,16 @@ levels = support_resistance(df)
 decision = build_decision(df, levels)
 raw_signals, signal_counts, signal_transitions = signal_history(df)
 c1,c2,c3,c4=st.columns(4)
-c1.metric('Price',f"{df['Close'].iloc[-1]:,.2f}")
+if symbol in ('^NSEI', 'NIFTY', 'NIFTY50', 'NIFTY 50'):
+    live = get_nifty_ltp()
+    if live.get('available'):
+        c1.metric('Price (Angel One LIVE)', f"{live['price']:,.2f}", f"{live['price']-live['close']:+,.2f}" if live.get('close') else None)
+    else:
+        c1.metric('Price (delayed, yfinance)', f"{df['Close'].iloc[-1]:,.2f}")
+        if 'not set' not in live.get('message',''):
+            st.sidebar.caption(f"Angel One live feed: {live.get('message')}")
+else:
+    c1.metric('Price',f"{df['Close'].iloc[-1]:,.2f}")
 c2.metric('Signal',decision['signal'])
 c3.metric('Confidence',f"{decision['confidence']:.0f}/100")
 c4.metric('Technical Score',f"{decision['technical_score']:+.0f}")

@@ -8,3 +8,6 @@ pyswisseph>=2.10.3.2
 requests>=2.32
 feedparser>=6.0
 lxml>=5.0
+smartapi-python>=1.5.5
+pyotp>=2.9.0
+websocket-client>=1.8.0
