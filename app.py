@@ -5,10 +5,17 @@ import pandas as pd
 from core.data import load_market_data
 from core.indicators import add_indicators
 from core.levels import support_resistance
-from core.decision import build_decision
+from core.decision import build_decision, signal_history
 from core.astro import get_sidereal_positions
 from modules.gift_nifty import load_gift_nifty
 from modules.news import load_news
+
+# Cache expensive network/computation calls so the app stays smooth on every
+# widget interaction (Streamlit reruns the whole script on each change).
+load_market_data = st.cache_data(ttl=60)(load_market_data)
+load_gift_nifty = st.cache_data(ttl=30)(load_gift_nifty)
+load_news = st.cache_data(ttl=300)(load_news)
+get_sidereal_positions = st.cache_data(ttl=300)(get_sidereal_positions)
 
 st.set_page_config(page_title='Jarvis Trading Assistant', page_icon='🤖', layout='wide')
 st.title('🤖 Jarvis Trading Assistant')
